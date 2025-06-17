@@ -6,6 +6,8 @@ By default, Windows 11 assigns interrupts from devices to already active P-cores
 MSIAutoTweak is a little Windows tool designed to optimize interrupt cpu allocation on Windows 11 systems with Intel hybrid CPUs (featuring P-cores and E-cores). It is inspired by other similar manual interrupt affinity tools, but I wanted to create a simple, automated solution that does not require manual configuration or knowledge of which devices to tweak. It automatically enables Message Signaled Interrupts (MSI) for devices that support it and assigns their interrupts to E-cores, potentially improving system performance for latency-sensitive tasks.
 Note: You have to rerun this after every driver update as these restore the default not optimized settings for that device.
 
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/9196d06f-507c-4ce9-9b3c-4c9731a783cf" />
+
 ## Installation
 
 ### Prerequisites
