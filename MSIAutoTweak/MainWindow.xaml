@@ -1,0 +1,78 @@
+<Window x:Class="MSIAutoTweak.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:MSIAutoTweak"
+        Title="MSIAutoTweak"
+        SizeToContent="WidthAndHeight"
+        WindowStyle="SingleBorderWindow"
+        ResizeMode="CanMinimize">
+    <Window.Resources>
+        <local:InterruptSupportConverter x:Key="interruptSupportConverter"/>
+        <local:DevicePolicyConverter x:Key="devicePolicyConverter"/>
+        <local:DevicePriorityConverter x:Key="devicePriorityConverter"/>
+        <local:AssignmentSetConverter x:Key="assignmentSetConverter"/>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
+            <DataGrid x:Name="DevicesGrid"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      FontSize="12">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Device Name"
+                                        Binding="{Binding DeviceDesc}"
+                                        Width="340"/>
+                    <DataGridTextColumn Header="Class"
+                                        Binding="{Binding Class}"
+                                        Width="90"/>
+                    <DataGridTextColumn Header="Interrupt Support"
+                                        Binding="{Binding InterruptSupport,Converter={StaticResource interruptSupportConverter}}"
+                                        Width="140"/>
+                    <DataGridCheckBoxColumn Header="MSI Enabled"
+                                            Binding="{Binding MSISupported}"
+                                            Width="75"/>
+                    <DataGridTextColumn Header="Device Policy"
+                                        Binding="{Binding DevicePolicy,Converter={StaticResource devicePolicyConverter}}"
+                                        Width="220"/>
+                    <DataGridTextColumn Header="Device Priority"
+                                        Binding="{Binding DevicePriority,Converter={StaticResource devicePriorityConverter}}"
+                                        Width="90"/>
+                    <DataGridTextColumn Header="Assigned Cores"
+                                        Binding="{Binding AssignmentSetOverride,Converter={StaticResource assignmentSetConverter}}"
+                                        Width="100"/>
+                    <DataGridTextColumn Header="Interrupt Message Maximum"
+                                        Binding="{Binding InterruptMessageMaximum}"
+                                        Width="100"
+                                        Visibility="Collapsed"/>
+                    <DataGridTextColumn Header="Message Number Limit"
+                                        Binding="{Binding MessageNumberLimit}"
+                                        Width="100"
+                                        Visibility="Collapsed"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+        <Grid Grid.Row="1">
+            <StackPanel Orientation="Vertical"
+                        Margin="100,15,15,15"
+                        HorizontalAlignment="Left">
+                <CheckBox x:Name="RestartDevicesCheckBox"
+                          Content="Restart devices"/>
+                <CheckBox x:Name="OptimizeMiscDevicesCheckBox"
+                          Content="Optimize misc devices"/>
+            </StackPanel>
+            <Button x:Name="OptimizeButton"
+                    Content="Optimize Interrupts"
+                    Margin="10"
+                    Padding="5"
+                    Width="150"
+                    HorizontalAlignment="Center"
+                    Click="OptimizeButton_Click"/>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,12 @@
+SetupDiCallClassInstaller
+SetupDiGetClassDevs
+SetupDiGetDeviceInstanceId
+SetupDiGetDeviceProperty
+SetupDiGetDeviceRegistryProperty
+SetupDiEnumDeviceInfo
+SetupDiOpenDevRegKey
+SetupDiSetClassInstallParams
+CM_DEVNODE_STATUS_FLAGS
+SP_PROPCHANGE_PARAMS 
+GetSystemCpuSetInformation
+SYSTEM_CPU_SET_INFORMATION
