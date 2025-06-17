@@ -203,6 +203,9 @@ namespace MSIAutoTweak
 
                     _devices.Add(device);
                 }
+
+                // Sort devices by description to make it predictable
+                _devices.Sort((a, b) => string.Compare(a.DeviceDesc, b.DeviceDesc, StringComparison.OrdinalIgnoreCase));
             }
             finally
             {
