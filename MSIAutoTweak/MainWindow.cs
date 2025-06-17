@@ -5,6 +5,7 @@ using System.Globalization;
 using System.ComponentModel;
 using System.Text.Json;
 using System.IO;
+using System.Windows.Controls.Primitives;
 
 namespace MSIAutoTweak
 {
@@ -38,10 +39,12 @@ namespace MSIAutoTweak
             try
             {
                 _msiOptimizer.Optimize();
+                DevicesGrid.Items.Refresh();
                 MessageBox.Show($"Optimization completed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
+                DevicesGrid.Items.Refresh();
                 MessageBox.Show($"An error occurred during optimization: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
