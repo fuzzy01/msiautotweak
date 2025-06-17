@@ -62,7 +62,7 @@
                         Margin="100,15,15,15"
                         HorizontalAlignment="Left">
                 <CheckBox x:Name="RestartDevicesCheckBox"
-                          Content="Restart devices"/>
+                          Content="Restart devices (can cause screen flicker)"/>
                 <CheckBox x:Name="OptimizeMiscDevicesCheckBox"
                           Content="Optimize misc devices"/>
             </StackPanel>
@@ -73,6 +73,13 @@
                     Width="150"
                     HorizontalAlignment="Center"
                     Click="OptimizeButton_Click"/>
+            <TextBlock x:Name="StatusTextBlock"
+                       Margin="10"
+                       HorizontalAlignment="Right"
+                       FontSize="12"
+                       Foreground="Gray">
+            v1.0.0 - by fuzzy01
+            </TextBlock>
         </Grid>
     </Grid>
 </Window>
