@@ -46,6 +46,8 @@
         "Release",
         "-f",
         "net8.0-windows",
+        "-r",
+        "win-x64",
         "--no-self-contained",
         "--output",
         "MSIAutoTweak/publish"
