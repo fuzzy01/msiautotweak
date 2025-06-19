@@ -278,14 +278,14 @@ namespace MSIAutoTweak
                 var usbDevices = devices.FindAll(d => d.Class == "USB" || d.Class == "HIDClass");
                 foreach (var device in usbDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores);
+                    OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
                     devices.Remove(device);
                 }
 
                 var videoDevices = _devices.FindAll(d => d.Class == "Display");
                 foreach (var device in videoDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores);
+                    OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
                     devices.Remove(device);
                 }
 
@@ -293,7 +293,7 @@ namespace MSIAutoTweak
                 var audioDevices = devices.FindAll(d => d.DeviceDesc == "High Definition Audio Controller");
                 foreach (var device in audioDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores);
+                    OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
                     devices.Remove(device);
                 }
 
@@ -301,7 +301,7 @@ namespace MSIAutoTweak
                 int maxMessageNumberLimit = 0;
                 foreach (var device in netDevices)
                 {
-                    var res = OptimizeDevice(hDevInfo, device, availableCores, reuseCores: true);
+                    var res = OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices, reuseCores: true);
                     if (res != OptimizationResult.NotEnoughCores)
                         maxMessageNumberLimit = Math.Max(maxMessageNumberLimit, device.MessageNumberLimit);
                     devices.Remove(device);
@@ -314,7 +314,7 @@ namespace MSIAutoTweak
                     bool reuseCores = availableCores.Count == 1;
                     foreach (var device in devices)
                     {
-                        OptimizeDevice(hDevInfo, device, availableCores, reuseCores: reuseCores);
+                        OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices, reuseCores: reuseCores);
                     }
                 }
             }

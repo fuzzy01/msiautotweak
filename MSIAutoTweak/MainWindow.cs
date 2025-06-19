@@ -39,7 +39,9 @@ namespace MSIAutoTweak
             try
             {
                 _msiOptimizer.LoadDevices();
-                _msiOptimizer.Optimize();
+                _msiOptimizer.Optimize(
+                    RestartDevicesCheckBox.IsChecked ?? true,
+                    OptimizeMiscDevicesCheckBox.IsChecked ?? true);
                 _msiOptimizer.LoadDevices();
                 DevicesGrid.Items.Refresh();
                 MessageBox.Show($"Optimization completed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
