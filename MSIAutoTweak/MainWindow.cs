@@ -38,12 +38,15 @@ namespace MSIAutoTweak
         {
             try
             {
+                _msiOptimizer.LoadDevices();
                 _msiOptimizer.Optimize();
+                _msiOptimizer.LoadDevices();
                 DevicesGrid.Items.Refresh();
                 MessageBox.Show($"Optimization completed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
+                _msiOptimizer.LoadDevices();
                 DevicesGrid.Items.Refresh();
                 MessageBox.Show($"An error occurred during optimization: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
@@ -158,14 +161,14 @@ namespace MSIAutoTweak
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            UInt64 assignmentSet = (UInt64)value;
+            Int64 assignmentSet = (Int64)value;
             if (assignmentSet == 0)
                 return "";
 
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < 64; i++)
             {
-                if ((assignmentSet & (1UL << i)) != 0)
+                if ((assignmentSet & (1L << i)) != 0)
                 {
                     sb.Append(i + " ");
                 }

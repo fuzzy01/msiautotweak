@@ -51,6 +51,13 @@ namespace MSIAutoTweak
             KEY_ALL_ACCESS = 0xF003F
         }
 
+        public enum ERROR_CODES : int
+        {
+             ERROR_SUCCESS = 0, 
+             ERROR_INSUFFICIENT_BUFFER = 122, 
+             ERROR_NO_MORE_ITEMS = 259
+        }
+
         private readonly List<Device> _devices;
 
         public MSIOptimizer()
@@ -155,7 +162,7 @@ namespace MSIAutoTweak
                     }
 
                     RegistryKey regKey = RegistryKey.FromHandle(hKey);
-                    RegistryKey? msiKey = null, affinityKey = null;
+                    RegistryKey? msiKey = null, affinityKey = null, temporalKey = null;
 
                     try
                     {
@@ -186,22 +193,36 @@ namespace MSIAutoTweak
                                     Array.Copy(arrayValue, t, arrayValue.Length);
                                     arrayValue = t;
                                 }
-                                device.AssignmentSetOverride = BitConverter.ToUInt64(arrayValue, 0);
+                                device.AssignmentSetOverride = BitConverter.ToInt64(arrayValue, 0);
                             }
-                            else if (assignmentSetOverride is UInt64 uintValue)
+                            else if (assignmentSetOverride is Int64 intValue)
                             {
-                                device.AssignmentSetOverride = uintValue;
+                                device.AssignmentSetOverride = intValue;
                             }
+                        }
+
+                        temporalKey = regKey.OpenSubKey(@"Interrupt Management\Affinity Policy - Temporal");
+                        if (temporalKey != null)
+                        {
+                            // Check if the device has a specific temporal affinity policy set
+                            device.TargetSet = (Int64)temporalKey.GetValue("TargetSet", 0UL);
                         }
                     }
                     finally
                     {
                         msiKey?.Dispose();
                         affinityKey?.Dispose();
+                        temporalKey?.Dispose();
                         regKey.Dispose();
+                        hKey.Dispose();
                     }
 
                     _devices.Add(device);
+                }
+
+                if (Marshal.GetLastPInvokeError() != (int)ERROR_CODES.ERROR_NO_MORE_ITEMS)
+                {
+                    throw new Exception($"Failed to get device info. Error: {Marshal.GetLastPInvokeError()}");
                 }
 
                 // Sort devices by description to make it predictable
@@ -214,14 +235,14 @@ namespace MSIAutoTweak
         }
 
 
-        public unsafe void Optimize(bool restartDevices = true)
+        public unsafe void Optimize(bool restartDevices = true, bool optimizeMiscDevices = true)
         {
             (int pCoreCount, int eCoreCount, bool hyperThreadingEnabled) = GetCPUInformation();
 
-            if (eCoreCount == 0 && ((hyperThreadingEnabled && pCoreCount < 12) || (!hyperThreadingEnabled && pCoreCount < 6)))
+            if (eCoreCount < 4 && ((hyperThreadingEnabled && pCoreCount < 12) || (!hyperThreadingEnabled && pCoreCount < 6)))
             {
-                // If no E-cores detected and number of P-cores is less than 6, throw an exception
-                throw new Exception("No E-cores detected and number of P-cores is less than 6.");
+                // If not enough E-cores detected and number of P-cores is less than 6, throw an exception
+                throw new Exception("Not enough  E-cores detected and number of P-cores is less than 6.");
             }
 
             var hDevInfo = PInvoke.SetupDiGetClassDevs((Guid?)null, null, HWND.Null, SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_PRESENT | SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_ALLCLASSES);
@@ -287,13 +308,15 @@ namespace MSIAutoTweak
                 }
                 availableCores.RemoveRange(0, maxMessageNumberLimit);
 
-                // Remaining devices will be assigned to the remaining cores
-                bool reuseCores = availableCores.Count == 1;
-                foreach (var device in devices)
+                if (optimizeMiscDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores, reuseCores: reuseCores);
+                    // Remaining devices will be assigned to the remaining cores
+                    bool reuseCores = availableCores.Count == 1;
+                    foreach (var device in devices)
+                    {
+                        OptimizeDevice(hDevInfo, device, availableCores, reuseCores: reuseCores);
+                    }
                 }
-
             }
             finally
             {
@@ -314,12 +337,12 @@ namespace MSIAutoTweak
             var messageNumberLimit = Math.Max(device.MessageNumberLimit, 1);
             if (availableCores.Count >= messageNumberLimit)
             {
-                UInt64 affinityMask = 0;
+                Int64 affinityMask = 0;
                 for (int i = 0; i < messageNumberLimit; i++)
                 {
                     int coreIndex = availableCores[i];
                     Debug.WriteLine($"Assign {device.Class} Device {device.DeviceDesc} to Core {coreIndex}");
-                    affinityMask |= 1UL << coreIndex;
+                    affinityMask |= 1L << coreIndex;
                 }
 
                 if (!reuseCores)
@@ -356,7 +379,7 @@ namespace MSIAutoTweak
             }
         }
 
-        private void SetDeviceParameters(SafeHandle hDevInfo, Device device, Device.IRQ_DEVICE_POLICY devicePolicy, UInt64 affinityMask)
+        private void SetDeviceParameters(SafeHandle hDevInfo, Device device, Device.IRQ_DEVICE_POLICY devicePolicy, Int64 affinityMask)
         {
             var devInfoData = GetDeviceInfo(hDevInfo, device);
 
@@ -432,11 +455,11 @@ namespace MSIAutoTweak
             var hDevInfo2 = new HDEVINFO(hDevInfo.DangerousGetHandle());
             if (!PInvoke.SetupDiSetClassInstallParams(hDevInfo2, &devInfoData, &propChangeParams.ClassInstallHeader, (uint)Marshal.SizeOf<SP_PROPCHANGE_PARAMS>()))
             {
-                throw new Exception($"Failed to set class install params for {device.DeviceDesc}. Error: {Marshal.GetLastWin32Error()}");
+                throw new Exception($"Failed to set class install params for {device.DeviceDesc}. Error: {Marshal.GetLastPInvokeError()}");
             }
             if (!PInvoke.SetupDiCallClassInstaller(DI_FUNCTION.DIF_PROPERTYCHANGE, hDevInfo, devInfoData))
             {
-                throw new Exception($"Failed to call class installer for {device.DeviceDesc}. Error: {Marshal.GetLastWin32Error()}");
+                throw new Exception($"Failed to call class installer for {device.DeviceDesc}. Error: {Marshal.GetLastPInvokeError()}");
             }
         }
 
@@ -468,17 +491,19 @@ namespace MSIAutoTweak
         // Complicated logic to get the number of P-cores and E-cores
         private unsafe (int, int, bool) GetCPUInformation()
         {
+            Marshal.SetLastPInvokeError(0); // Reset last error, workaround for a bug in CSWin32 wrapper
+                        
             uint returnLength = 0;
             bool success = PInvoke.GetSystemCpuSetInformation(null, 0, out returnLength, null);
-            if (!success && Marshal.GetLastWin32Error() != 0)
-                throw new Exception($"Failed to get CPU set info size. Error: {Marshal.GetLastWin32Error()}");
+            if (!success && Marshal.GetLastPInvokeError() != 0)
+                throw new Exception($"Failed to get CPU set info size. Error: {Marshal.GetLastPInvokeError()}");
 
             IntPtr buffer = Marshal.AllocHGlobal((int)returnLength);
             try
             {
                 success = PInvoke.GetSystemCpuSetInformation((SYSTEM_CPU_SET_INFORMATION*)buffer, returnLength, out returnLength, null);
                 if (!success)
-                    throw new Exception($"Failed to get CPU set info. Error: {Marshal.GetLastWin32Error()}");
+                    throw new Exception($"Failed to get CPU set info. Error: {Marshal.GetLastPInvokeError()}");
 
                 int pCoreCount = 0;
                 int eCoreCount = 0;

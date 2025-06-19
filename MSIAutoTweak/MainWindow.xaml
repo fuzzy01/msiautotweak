@@ -45,7 +45,10 @@
                                         Width="90"/>
                     <DataGridTextColumn Header="Assigned Cores"
                                         Binding="{Binding AssignmentSetOverride,Converter={StaticResource assignmentSetConverter}}"
-                                        Width="100"/>
+                                        Width="Auto"/>
+                    <DataGridTextColumn Header="Currently Used Cores"
+                                        Binding="{Binding TargetSet,Converter={StaticResource assignmentSetConverter}}"
+                                        Width="Auto"/>
                     <DataGridTextColumn Header="Interrupt Message Maximum"
                                         Binding="{Binding InterruptMessageMaximum}"
                                         Width="100"
@@ -78,7 +81,7 @@
                        HorizontalAlignment="Right"
                        FontSize="12"
                        Foreground="Gray">
-            v1.0.0 - by fuzzy01
+            v1.1 - by fuzzy01
             </TextBlock>
         </Grid>
     </Grid>

@@ -44,7 +44,8 @@ namespace MSIAutoTweak
         public int MessageNumberLimit { get; set; } = -1;
         public int DevicePolicy { get; set; } = -1; 
         public int DevicePriority { get; set; } = -1;
-        public ulong AssignmentSetOverride { get; set; } = 0;
+        public Int64 AssignmentSetOverride { get; set; } = 0;
+        public Int64 TargetSet { get; set; } = 0;
 
         public bool IsMSISupported => (InterruptSupport & (uint)IRQ_SUPPORT.IrqSupportMSI) != 0 || (InterruptSupport & (uint)IRQ_SUPPORT.IrqSupportMSIX) != 0;
         public bool IsLineBasedSupported => (InterruptSupport & (uint)IRQ_SUPPORT.IrqSupportLineBased) != 0;
