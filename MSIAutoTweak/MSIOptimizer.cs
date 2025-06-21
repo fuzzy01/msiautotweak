@@ -7,6 +7,8 @@ using Windows.Win32.Devices.Properties;
 using Windows.Win32.Devices.DeviceAndDriverInstallation;
 using Windows.Win32.System.SystemInformation;
 using System.Diagnostics;
+using System.Data.Common;
+using System.Reflection.Metadata;
 
 namespace MSIAutoTweak
 {
@@ -53,9 +55,9 @@ namespace MSIAutoTweak
 
         public enum ERROR_CODES : int
         {
-             ERROR_SUCCESS = 0, 
-             ERROR_INSUFFICIENT_BUFFER = 122, 
-             ERROR_NO_MORE_ITEMS = 259
+            ERROR_SUCCESS = 0,
+            ERROR_INSUFFICIENT_BUFFER = 122,
+            ERROR_NO_MORE_ITEMS = 259
         }
 
         private readonly List<Device> _devices;
@@ -253,68 +255,145 @@ namespace MSIAutoTweak
 
             try
             {
-                var availableCores = new List<int>();
+                var availableCoresStage1 = new List<int>();
 
                 if (eCoreCount != 0)
                 {
                     // Use only E-cores if available
                     for (int i = pCoreCount + eCoreCount - 1; i >= pCoreCount; i--)
                     {
-                        availableCores.Add(i);
+                        availableCoresStage1.Add(i);
                     }
                 }
                 else
                 {
-                    // We have no E-cores, reserve at lear 4 P-cores for apps
-                    for (int i = 4; i < pCoreCount; i++)
+                    // We have no E-cores, reserve at least 4 P-cores for apps
+                    for (int i = pCoreCount - 1; i >= 4; i--)
                     {
-                        availableCores.Add(i);
+                        availableCoresStage1.Add(i);
                     }
                 }
 
-                // Skip NVMe and SATA controllers
-                var devices = _devices.ToList().Where(d => d.IsMSISupported && d.Class != "SCSIAdapter" && d.Class != "HDC").ToList();
+                OptimizationResult res;
+                int coreUsed;
 
-                var usbDevices = devices.FindAll(d => d.Class == "USB" || d.Class == "HIDClass");
+                // Skip NVMe and SATA controllers
+                var msiDevices = _devices.ToList().Where(d => d.IsMSISupported && d.Class != "SCSIAdapter" && d.Class != "HDC").ToList();
+                var lineDevices = _devices.ToList().Where(d => !d.IsMSISupported && d.IsLineBasedSupported && d.TargetSet != 0).ToList();
+
+                // Put sensitive devices on specific cores
+
+                var usbDevices = msiDevices.FindAll(d => d.Class == "USB");
                 foreach (var device in usbDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
-                    devices.Remove(device);
+                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
+                    msiDevices.Remove(device);
+                    availableCoresStage1.RemoveRange(0, coreUsed);
                 }
 
                 var videoDevices = _devices.FindAll(d => d.Class == "Display");
                 foreach (var device in videoDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
-                    devices.Remove(device);
+                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
+                    msiDevices.Remove(device);
+                    availableCoresStage1.RemoveRange(0, coreUsed);    
                 }
 
                 // Audio devices have no proper class, so we filter by device description
-                var audioDevices = devices.FindAll(d => d.DeviceDesc == "High Definition Audio Controller");
+                var audioDevices = msiDevices.FindAll(d => d.DeviceDesc == "High Definition Audio Controller" || d.DeviceDesc == "Realtek High Definition Audio" || d.DeviceDesc == "NVIDIA High Definition Audio");
                 foreach (var device in audioDevices)
                 {
-                    OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
-                    devices.Remove(device);
+                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
+                    msiDevices.Remove(device);
+                    availableCoresStage1.RemoveRange(0, coreUsed);
                 }
 
-                var netDevices = devices.FindAll(d => d.Class == "Net");
-                int maxMessageNumberLimit = 0;
+                var availableCoresStage2 = availableCoresStage1.ToList();
+
+                // Assign network devices to same cores, they are rarely used the same time on a desktop PC
+                var availableCoresForNetDevices = availableCoresStage2.ToList();
+                var netDevices = msiDevices.FindAll(d => d.Class == "Net");
+                int maxCoreUsed = 0;
                 foreach (var device in netDevices)
                 {
-                    var res = OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices, reuseCores: true);
-                    if (res != OptimizationResult.NotEnoughCores)
-                        maxMessageNumberLimit = Math.Max(maxMessageNumberLimit, device.MessageNumberLimit);
-                    devices.Remove(device);
+                    var availableCores = availableCoresForNetDevices.ToList();
+
+                    if (device.DeviceDesc == "Intel(R) Ethernet Controller I226-V")
+                    {
+                        // Workaround for Intel I226-V bug
+                        while (availableCores.Count > 0 && availableCores[0] >= 24)
+                        {
+                            availableCores.RemoveAt(0);
+                        }
+                    }
+
+                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
+                    maxCoreUsed = Math.Max(maxCoreUsed, coreUsed);
+                    msiDevices.Remove(device);
                 }
-                availableCores.RemoveRange(0, maxMessageNumberLimit);
+                availableCoresForNetDevices.RemoveRange(0, maxCoreUsed);
+
+                var availableCoresStage3 = availableCoresForNetDevices.ToList();
 
                 if (optimizeMiscDevices)
                 {
+                    List<int>? availableCoresForMiscDevices = null;
+
                     // Remaining devices will be assigned to the remaining cores
-                    bool reuseCores = availableCores.Count == 1;
-                    foreach (var device in devices)
+                    if (availableCoresStage3.Count >= msiDevices.Count)
                     {
-                        OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices, reuseCores: reuseCores);
+                        availableCoresForMiscDevices = availableCoresStage3.ToList();
+                    }
+                    else if (availableCoresStage2.Count >= msiDevices.Count)
+                    {
+                        availableCoresForMiscDevices = availableCoresStage2.ToList();
+                    }
+
+                    if (availableCoresForMiscDevices != null)
+                    {
+                        // Remaining devices will be assigned to the remaining cores
+                        foreach (var device in msiDevices)
+                        {
+                            (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresForMiscDevices, restartDevice: restartDevices);
+                            availableCoresForMiscDevices.RemoveRange(0, coreUsed);
+                        }
+                    }
+                    else
+                    {
+                        // Not enough cores available for remaining devices, un-optimize them
+                        foreach (var device in msiDevices)
+                        {
+                            UnOptimizeDevice(hDevInfo, device, restartDevice: restartDevices);
+                        }
+                    }
+
+                    List<int>? availableCoresForLineDevices = null;
+
+                    if (availableCoresStage3.Count >= lineDevices.Count)
+                    {
+                        availableCoresForLineDevices = availableCoresStage3.ToList();
+                    }
+                    else if (availableCoresStage2.Count >= lineDevices.Count)
+                    {
+                        availableCoresForLineDevices = availableCoresStage2.ToList();
+                    }
+
+                    if (availableCoresForLineDevices != null)
+                    {
+                        // Line  devices will be assigned to the remaining cores
+                        foreach (var device in lineDevices)
+                        {
+                            (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresForLineDevices, restartDevice: restartDevices);
+                            availableCoresForLineDevices.RemoveRange(0, coreUsed);
+                        }
+                    }
+                    else
+                    {
+                        // Not enough cores available for line devices, un-optimize them
+                        foreach (var device in lineDevices)
+                        {
+                            UnOptimizeDevice(hDevInfo, device, restartDevice: restartDevices);
+                        }
                     }
                 }
             }
@@ -325,14 +404,16 @@ namespace MSIAutoTweak
 
         }
 
+        
         enum OptimizationResult
         {
             AlreadyOptimized,
             SuccessfullyOptimized,
-            NotEnoughCores
+            AlreadyUnOptimized,
+            SuccessfullyUnOptimized
         }
 
-        private OptimizationResult OptimizeDevice(SafeHandle hDevInfo, Device device, List<int> availableCores, bool restartDevice = true, bool reuseCores = false)
+        private (OptimizationResult, int) OptimizeDevice(SafeHandle hDevInfo, Device device, List<int> availableCores, bool restartDevice = true)
         {
             var messageNumberLimit = Math.Max(device.MessageNumberLimit, 1);
             if (availableCores.Count >= messageNumberLimit)
@@ -345,38 +426,45 @@ namespace MSIAutoTweak
                     affinityMask |= 1L << coreIndex;
                 }
 
-                if (!reuseCores)
-                    availableCores.RemoveRange(0, messageNumberLimit);
-
-                if (device.MSISupported == 1 && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors && device.AssignmentSetOverride == affinityMask)
-                    return OptimizationResult.AlreadyOptimized;
-
-                SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors, affinityMask);
-
-                if (restartDevice)
-                {
-                    RestartDevice(hDevInfo, device);
-                }
-
-                return OptimizationResult.SuccessfullyOptimized;
+                return (OptimizeDevice(hDevInfo, device, affinityMask, restartDevice), messageNumberLimit);
             }
             else
             {
                 Debug.WriteLine($"Not enough cores available for {device.Class} Device {device.DeviceDesc}. Available: {availableCores.Count}, Required: {messageNumberLimit}");
 
-                // Set it back to machine default
-                if (device.MSISupported == 1 && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault)
-                    return OptimizationResult.NotEnoughCores;
-
-                SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault, 0L);
-
-                if (restartDevice)
-                {
-                    RestartDevice(hDevInfo, device);
-                }
-
-                return OptimizationResult.NotEnoughCores;
+                return (UnOptimizeDevice(hDevInfo, device, restartDevice), 0);
             }
+        }
+
+
+        private OptimizationResult OptimizeDevice(SafeHandle hDevInfo, Device device, Int64 affinityMask, bool restartDevice = true)
+        {
+            if ((device.MSISupported != 0) == device.IsMSISupported && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors && device.AssignmentSetOverride == affinityMask)
+                return OptimizationResult.AlreadyOptimized;
+
+            SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors, affinityMask);
+
+            if (restartDevice)
+            {
+                RestartDevice(hDevInfo, device);
+            }
+
+            return OptimizationResult.SuccessfullyOptimized;
+        }
+
+        private OptimizationResult UnOptimizeDevice(SafeHandle hDevInfo, Device device, bool restartDevice = true)
+        {
+            if ((device.MSISupported != 0) == device.IsMSISupported && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault)
+                return OptimizationResult.AlreadyUnOptimized;
+
+            SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault, 0L);
+
+            if (restartDevice)
+            {
+                RestartDevice(hDevInfo, device);
+            }
+
+            return OptimizationResult.SuccessfullyUnOptimized;
         }
 
         private void SetDeviceParameters(SafeHandle hDevInfo, Device device, Device.IRQ_DEVICE_POLICY devicePolicy, Int64 affinityMask)
@@ -392,11 +480,17 @@ namespace MSIAutoTweak
 
             try
             {
-                msiKey = regKey.CreateSubKey(@"Interrupt Management\MessageSignaledInterruptProperties", writable: true);
-                msiKey.SetValue("MSISupported", 1, RegistryValueKind.DWord);
+                if (device.IsMSISupported)
+                {
+                    msiKey = regKey.CreateSubKey(@"Interrupt Management\MessageSignaledInterruptProperties", writable: true);
+                    msiKey.SetValue("MSISupported", 1, RegistryValueKind.DWord);
+                    device.MSISupported = 1;
+                }
 
                 affinityKey = regKey.CreateSubKey(@"Interrupt Management\Affinity Policy", writable: true);
                 affinityKey.SetValue("DevicePolicy", (int)devicePolicy, RegistryValueKind.DWord);
+                device.DevicePolicy = (int)devicePolicy;
+
                 if (devicePolicy == Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors)
                 {
                     affinityKey.SetValue("AssignmentSetOverride", BitConverter.GetBytes(affinityMask), RegistryValueKind.Binary);
@@ -405,17 +499,15 @@ namespace MSIAutoTweak
                 {
                     affinityKey.DeleteValue("AssignmentSetOverride", false);
                 }
+                device.AssignmentSetOverride = affinityMask;
             }
             finally
             {
                 msiKey?.Dispose();
                 affinityKey?.Dispose();
                 regKey.Dispose();
+                hKey.Dispose();
             }
-
-            device.MSISupported = 1;
-            device.DevicePolicy = (int)devicePolicy;
-            device.AssignmentSetOverride = affinityMask;
         }
 
         public unsafe void RestartDevice(SafeHandle hDevInfo, Device device)
@@ -492,7 +584,7 @@ namespace MSIAutoTweak
         private unsafe (int, int, bool) GetCPUInformation()
         {
             Marshal.SetLastPInvokeError(0); // Reset last error, workaround for a bug in CSWin32 wrapper
-                        
+
             uint returnLength = 0;
             bool success = PInvoke.GetSystemCpuSetInformation(null, 0, out returnLength, null);
             if (!success && Marshal.GetLastPInvokeError() != 0)
