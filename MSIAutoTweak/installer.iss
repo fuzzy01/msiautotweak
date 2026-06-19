@@ -1,6 +1,6 @@
 ; Inno Setup script for CollingControl
 #define MyAppName "MSIAutoTweak"
-#define MyAppVersion "1.0.0.0"
+#define MyAppVersion "1.2.0.0"
 #define MyAppPublisher "Fuzzy01 - Peter Laszlo"
 #define MyAppExeName "MSIAutoTweak.exe"
 
@@ -38,3 +38,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 [UninstallRun]
 
 [Code]
+procedure InitializeWizard;
+begin
+  WizardForm.Show;
+end;
