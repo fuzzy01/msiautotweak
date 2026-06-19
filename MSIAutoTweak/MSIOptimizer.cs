@@ -95,11 +95,11 @@ namespace MSIAutoTweak
 
                     // Get Interrupt Support 
                     DEVPROPTYPE propType;
-                    if (PInvoke.SetupDiGetDeviceProperty(hDevInfo, in devInfoData, DEVPKEY_PciDevice_InterruptSupport, out propType, buffer, &requiredSize, 0))
+                    if (PInvoke.SetupDiGetDeviceProperty(hDevInfo, in devInfoData, DEVPKEY_PciDevice_InterruptSupport, out propType, buffer, out requiredSize, 0))
                     {
                         device.InterruptSupport = propType == DEVPROPTYPE.DEVPROP_TYPE_UINT32 ? BitConverter.ToUInt32(buffer) : 0;
 
-                        if (PInvoke.SetupDiGetDeviceProperty(hDevInfo, in devInfoData, DEVPKEY_PciDevice_InterruptMessageMaximum, out propType, buffer, &requiredSize, 0))
+                        if (PInvoke.SetupDiGetDeviceProperty(hDevInfo, in devInfoData, DEVPKEY_PciDevice_InterruptMessageMaximum, out propType, buffer, out requiredSize, 0))
                         {
                             device.InterruptMessageMaximum = propType == DEVPROPTYPE.DEVPROP_TYPE_UINT32 ? BitConverter.ToUInt32(buffer) : 0;
                         }
@@ -115,7 +115,8 @@ namespace MSIAutoTweak
                     }
 
                     // Get device description
-                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_DEVICEDESC, null, buffer, &requiredSize))
+                    uint propDataType;
+                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_DEVICEDESC, out propDataType, buffer, out requiredSize))
                     {
                         device.DeviceDesc = Encoding.Unicode.GetString(buffer[..((int)requiredSize - 2)]);
                     }
@@ -125,32 +126,32 @@ namespace MSIAutoTweak
                     }
 
                     // Get friendly name
-                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_FRIENDLYNAME, null, buffer, &requiredSize))
+                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_FRIENDLYNAME, out propDataType, buffer, out requiredSize))
                     {
                         device.FriendlyName = Encoding.Unicode.GetString(buffer[..((int)requiredSize - 2)]);
                     }
 
                     // Get Location information
-                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_LOCATION_INFORMATION, null, buffer, &requiredSize))
+                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_LOCATION_INFORMATION, out propDataType, buffer, out requiredSize))
                     {
                         device.LocationInfo = Encoding.Unicode.GetString(buffer[..((int)requiredSize - 2)]);
                     }
 
                     // Get Device Object Name
-                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_PHYSICAL_DEVICE_OBJECT_NAME, null, buffer, &requiredSize))
+                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_PHYSICAL_DEVICE_OBJECT_NAME, out propDataType, buffer, out requiredSize))
                     {
                         device.DeviceObjectName = Encoding.Unicode.GetString(buffer[..((int)requiredSize - 2)]);
                     }
 
                     // Get Device Type
-                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_CLASS, null, buffer, &requiredSize))
+                    if (PInvoke.SetupDiGetDeviceRegistryProperty(hDevInfo, in devInfoData, SETUP_DI_REGISTRY_PROPERTY.SPDRP_CLASS, out propDataType, buffer, out requiredSize))
                     {
                         device.Class = Encoding.Unicode.GetString(buffer[..((int)requiredSize - 2)]);
                     }
 
                     // Get Instance ID
                     var idBuffer = new Span<char>(new char[1024]);
-                    if (PInvoke.SetupDiGetDeviceInstanceId(hDevInfo, in devInfoData, idBuffer, &requiredSize))
+                    if (PInvoke.SetupDiGetDeviceInstanceId(hDevInfo, in devInfoData, idBuffer, out requiredSize))
                     {
                         device.InstanceId = idBuffer.Slice(0, (int)requiredSize - 1).ToString();
                     }
@@ -244,7 +245,7 @@ namespace MSIAutoTweak
             if (eCoreCount < 4 && ((hyperThreadingEnabled && pCoreCount < 12) || (!hyperThreadingEnabled && pCoreCount < 6)))
             {
                 // If not enough E-cores detected and number of P-cores is less than 6, throw an exception
-                throw new Exception("Not enough  E-cores detected and number of P-cores is less than 6.");
+                throw new Exception("Not enough E-cores detected and number of P-cores is less than 6.");
             }
 
             var hDevInfo = PInvoke.SetupDiGetClassDevs((Guid?)null, null, HWND.Null, SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_PRESENT | SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_ALLCLASSES);
@@ -517,7 +518,7 @@ namespace MSIAutoTweak
             var buffer = new Span<byte>(new byte[1024]);
             uint requiredSize = 0;
             DEVPROPTYPE propType;
-            if (PInvoke.SetupDiGetDeviceProperty(hDevInfo, in devInfoData, DEVPKEY_Device_DevNodeStatus, out propType, buffer, &requiredSize, 0))
+            if (PInvoke.SetupDiGetDeviceProperty(hDevInfo, in devInfoData, DEVPKEY_Device_DevNodeStatus, out propType, buffer, out requiredSize, 0))
             {
                 var nodeStatus = propType == DEVPROPTYPE.DEVPROP_TYPE_UINT32 ? BitConverter.ToUInt32(buffer) : 0;
                 if ((nodeStatus & (uint)CM_DEVNODE_STATUS_FLAGS.DN_STARTED) == 0)
@@ -567,7 +568,7 @@ namespace MSIAutoTweak
                 // Get Instance ID
                 uint requiredSize = 0;
                 var idBuffer = new Span<char>(new char[1024]);
-                if (PInvoke.SetupDiGetDeviceInstanceId(hDevInfo, in devInfoData, idBuffer, &requiredSize))
+                if (PInvoke.SetupDiGetDeviceInstanceId(hDevInfo, in devInfoData, idBuffer, out requiredSize))
                 {
                     string instanceId = idBuffer.Slice(0, (int)requiredSize - 1).ToString();
                     if (instanceId == device.InstanceId)
@@ -586,14 +587,14 @@ namespace MSIAutoTweak
             Marshal.SetLastPInvokeError(0); // Reset last error, workaround for a bug in CSWin32 wrapper
 
             uint returnLength = 0;
-            bool success = PInvoke.GetSystemCpuSetInformation(null, 0, out returnLength, null);
+            bool success = PInvoke.GetSystemCpuSetInformation(null, 0, &returnLength);
             if (!success && Marshal.GetLastPInvokeError() != 0)
                 throw new Exception($"Failed to get CPU set info size. Error: {Marshal.GetLastPInvokeError()}");
 
             IntPtr buffer = Marshal.AllocHGlobal((int)returnLength);
             try
             {
-                success = PInvoke.GetSystemCpuSetInformation((SYSTEM_CPU_SET_INFORMATION*)buffer, returnLength, out returnLength, null);
+                success = PInvoke.GetSystemCpuSetInformation((SYSTEM_CPU_SET_INFORMATION*)buffer, returnLength, &returnLength);
                 if (!success)
                     throw new Exception($"Failed to get CPU set info. Error: {Marshal.GetLastPInvokeError()}");
 
