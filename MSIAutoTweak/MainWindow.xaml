@@ -81,7 +81,7 @@
                        HorizontalAlignment="Right"
                        FontSize="12"
                        Foreground="Gray">
-            v1.1 - by fuzzy01
+            v1.2 - by fuzzy01
             </TextBlock>
         </Grid>
     </Grid>

@@ -13,12 +13,12 @@ Note: You have to rerun this after every driver update as these restore the defa
 ### Prerequisites
 
 - Windows 10 or later.
-- .NET 8 runtime  or .NET 9 runtime (optional).
+- .NET 8 runtime or .NET 10 runtime (optional).
 - Administrator privileges for installation and usage.
 
 ### Using the Pre-Built Installer
 
-1. Download the installer `MSIAutoTweak-net8.exe` from Releases. Alternatively, if you have .NET 9 installed (optional), you can use `MSIAutoTweak-net9.exe`.
+1. Download the installer `MSIAutoTweak-net8.exe` from Releases. Alternatively, if you have .NET 10 installed (optional), you can use `MSIAutoTweak-net10.exe`.
 2. Run the installer as administrator.
 3. Follow the wizard:
    - Installs to `C:\Program Files\MSIAutoTweak`.
