@@ -1,6 +1,8 @@
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 using System.Globalization;
 using System.ComponentModel;
 using System.Text.Json;
@@ -13,12 +15,17 @@ namespace MSIAutoTweak
     {
         public bool RestartDevices { get; set; } = true;
         public bool OptimizeMiscDevices { get; set; } = true;
+        public int OptimizationStrategy { get; set; } = 0; // Default to Default strategy
     }
 
     public partial class MainWindow : Window
     {
         private Config _config;
         private readonly MSIOptimizer _msiOptimizer;
+
+        private static readonly SolidColorBrush GreenBrush  = new(Color.FromRgb(0xC8, 0xE6, 0xC9));
+        private static readonly SolidColorBrush YellowBrush = new(Color.FromRgb(0xFF, 0xF9, 0xC4));
+        private static readonly SolidColorBrush BeigeBrush  = new(Color.FromRgb(0xF5, 0xF0, 0xE8));
 
         public MainWindow()
         {
@@ -41,7 +48,8 @@ namespace MSIAutoTweak
                 _msiOptimizer.LoadDevices();
                 _msiOptimizer.Optimize(
                     RestartDevicesCheckBox.IsChecked ?? true,
-                    OptimizeMiscDevicesCheckBox.IsChecked ?? true);
+                    OptimizeMiscDevicesCheckBox.IsChecked ?? true,
+                    (OptimizationStrategy)StrategyComboBox.SelectedIndex);
                 _msiOptimizer.LoadDevices();
                 DevicesGrid.Items.Refresh();
                 MessageBox.Show($"Optimization completed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -55,6 +63,43 @@ namespace MSIAutoTweak
             }
         }
     
+        private void DevicesGrid_LoadingRow(object sender, DataGridRowEventArgs e)
+        {
+            if (e.Row.Item is not Device device) return;
+            e.Row.Background = GetRowBrush(device, (OptimizationStrategy)StrategyComboBox.SelectedIndex);
+        }
+
+        private static Brush GetRowBrush(Device device, OptimizationStrategy strategy)
+        {
+            if (strategy == OptimizationStrategy.Default)
+            {
+                bool atDefault = device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault || device.DevicePolicy ==  (int)Device.IRQ_DEVICE_POLICY.IrqPolicyUndefined;
+                return atDefault ? GreenBrush : YellowBrush;
+            }
+            
+            // MoveToECores and Hybrid strategies
+            
+            if (device.IsMSISupported && (device.Class == "SCSIAdapter" || device.Class == "HDC"))
+                return BeigeBrush;
+            
+            if (device.IsMSISupported && device.MSISupported != 0
+                && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors
+                && device.AssignmentSetOverride != 0)
+                return GreenBrush;
+            
+            if (!device.IsMSISupported && device.IsLineBasedSupported 
+                && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors
+                && device.AssignmentSetOverride != 0)
+                return GreenBrush;
+            
+            return YellowBrush;
+        }
+
+        private void StrategyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            DevicesGrid?.Items.Refresh();
+        }
+
         protected override void OnClosing(CancelEventArgs e)
         {
             base.OnClosing(e);
@@ -73,13 +118,15 @@ namespace MSIAutoTweak
                 _config = new Config();
             }
             RestartDevicesCheckBox.IsChecked = _config.RestartDevices;
-            OptimizeMiscDevicesCheckBox.IsChecked = _config.OptimizeMiscDevices;    
+            OptimizeMiscDevicesCheckBox.IsChecked = _config.OptimizeMiscDevices;
+            StrategyComboBox.SelectedIndex = _config.OptimizationStrategy;
         }
 
         private void SaveConfig()
         {
             _config.RestartDevices = RestartDevicesCheckBox.IsChecked ?? true;
             _config.OptimizeMiscDevices = OptimizeMiscDevicesCheckBox.IsChecked ?? true;
+            _config.OptimizationStrategy = StrategyComboBox.SelectedIndex;
             File.WriteAllText("config.json", JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true }));
         }
     }

@@ -23,7 +23,8 @@
                       IsReadOnly="True"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto"
-                      FontSize="12">
+                      FontSize="12"
+                      LoadingRow="DevicesGrid_LoadingRow">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Device Name"
                                         Binding="{Binding DeviceDesc}"
@@ -64,6 +65,15 @@
             <StackPanel Orientation="Vertical"
                         Margin="100,15,15,15"
                         HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Strategy:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="StrategyComboBox" Width="140"
+                              SelectionChanged="StrategyComboBox_SelectionChanged">
+                        <ComboBoxItem Content="Default"/>
+                        <ComboBoxItem Content="Move to E-cores"/>
+                        <ComboBoxItem Content="Hybrid"/>
+                    </ComboBox>
+                </StackPanel>
                 <CheckBox x:Name="RestartDevicesCheckBox"
                           Content="Restart devices (can cause screen flicker)"/>
                 <CheckBox x:Name="OptimizeMiscDevicesCheckBox"
@@ -81,7 +91,7 @@
                        HorizontalAlignment="Right"
                        FontSize="12"
                        Foreground="Gray">
-            v1.1 - by fuzzy01
+            v1.2 - by fuzzy01
             </TextBlock>
         </Grid>
     </Grid>

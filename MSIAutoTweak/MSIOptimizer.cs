@@ -12,6 +12,8 @@ using System.Reflection.Metadata;
 
 namespace MSIAutoTweak
 {
+    public enum OptimizationStrategy { Default, MoveToECores, Hybrid }
+
     public class MSIOptimizer
     {
 
@@ -238,8 +240,23 @@ namespace MSIAutoTweak
         }
 
 
-        public unsafe void Optimize(bool restartDevices = true, bool optimizeMiscDevices = true)
+        public unsafe void Optimize(bool restartDevices = true, bool optimizeMiscDevices = true,
+            OptimizationStrategy strategy = OptimizationStrategy.MoveToECores)
         {
+            if (strategy == OptimizationStrategy.Default)
+            {
+                var hDev = PInvoke.SetupDiGetClassDevs((Guid?)null, null, HWND.Null, SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_PRESENT | SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_ALLCLASSES);
+                if (hDev.IsInvalid)
+                    throw new Exception("Failed to get device information.");
+                try
+                {
+                    foreach (var device in _devices)
+                        UnOptimizeDevice(hDev, device, restartDevices);
+                }
+                finally { hDev.Dispose(); }
+                return;
+            }
+
             (int pCoreCount, int eCoreCount, bool hyperThreadingEnabled) = GetCPUInformation();
 
             if (eCoreCount < 4 && ((hyperThreadingEnabled && pCoreCount < 12) || (!hyperThreadingEnabled && pCoreCount < 6)))
@@ -257,26 +274,27 @@ namespace MSIAutoTweak
             try
             {
                 var availableCoresStage1 = new List<int>();
+                for (int i = pCoreCount + eCoreCount - 1; i >= pCoreCount; i--)
+                {
+                    availableCoresStage1.Add(i);
+                }
 
-                if (eCoreCount != 0)
-                {
-                    // Use only E-cores if available
-                    for (int i = pCoreCount + eCoreCount - 1; i >= pCoreCount; i--)
-                    {
-                        availableCoresStage1.Add(i);
-                    }
-                }
-                else
-                {
-                    // We have no E-cores, reserve at least 4 P-cores for apps
-                    for (int i = pCoreCount - 1; i >= 4; i--)
-                    {
-                        availableCoresStage1.Add(i);
-                    }
-                }
 
                 OptimizationResult res;
                 int coreUsed;
+
+                var priorityDeviceCores = new List<int>();
+                if (strategy == OptimizationStrategy.Hybrid)
+                {
+                    // Use P-cores for priority devices, E-cores for other devices
+                    priorityDeviceCores = new List<int>();
+                    for (int i = pCoreCount - 1; i >= 0; i--)
+                        priorityDeviceCores.Add(i);
+                }
+                else
+                {
+                    priorityDeviceCores = availableCoresStage1;
+                }
 
                 // Skip NVMe and SATA controllers
                 var msiDevices = _devices.ToList().Where(d => d.IsMSISupported && d.Class != "SCSIAdapter" && d.Class != "HDC").ToList();
@@ -287,17 +305,17 @@ namespace MSIAutoTweak
                 var usbDevices = msiDevices.FindAll(d => d.Class == "USB");
                 foreach (var device in usbDevices)
                 {
-                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
+                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices);
                     msiDevices.Remove(device);
-                    availableCoresStage1.RemoveRange(0, coreUsed);
+                    priorityDeviceCores.RemoveRange(0, strategy == OptimizationStrategy.Hybrid && hyperThreadingEnabled ? coreUsed * 2 : coreUsed);           
                 }
 
                 var videoDevices = _devices.FindAll(d => d.Class == "Display");
                 foreach (var device in videoDevices)
                 {
-                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
+                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices);
                     msiDevices.Remove(device);
-                    availableCoresStage1.RemoveRange(0, coreUsed);    
+                    priorityDeviceCores.RemoveRange(0, strategy == OptimizationStrategy.Hybrid && hyperThreadingEnabled ? coreUsed * 2 : coreUsed);           
                 }
 
                 // Audio devices have no proper class, so we filter by device description
@@ -319,8 +337,7 @@ namespace MSIAutoTweak
                 {
                     var availableCores = availableCoresForNetDevices.ToList();
 
-                    if (device.DeviceDesc == "Intel(R) Ethernet Controller I226-V")
-                    {
+                    if (device.DeviceDesc == "Intel(R) Ethernet Controller I226-V" || device.DeviceDesc == "Intel(R) Wi-Fi 6E AX211 160MHz")                    {
                         // Workaround for Intel I226-V bug
                         while (availableCores.Count > 0 && availableCores[0] >= 24)
                         {

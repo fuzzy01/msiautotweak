@@ -2,9 +2,15 @@
 
 ## Overview
 
-By default, Windows 11 assigns interrupts from devices to already active P-cores on Intel hybrid CPUs, and not to sleeping E-cores which already have nothing to do. This can lead to increased latency and stuttering. Also Windows does not enforce using MSI interrupts for devices that support them, instead assigns the archaic line base interrupts to devices.
-MSIAutoTweak is a little Windows tool designed to optimize interrupt cpu allocation on Windows 11 systems with Intel hybrid CPUs (featuring P-cores and E-cores). It is inspired by other similar manual interrupt affinity tools, but I wanted to create a simple, automated solution that does not require manual configuration or knowledge of which devices to tweak. It automatically enables Message Signaled Interrupts (MSI) for devices that support it and assigns their interrupts to E-cores, potentially improving system performance for latency-sensitive tasks.
+By default, Windows 11 assigns interrupts from devices to already active P-cores on Intel hybrid CPUs, and not to E-cores (efficiency cores) which already have nothing to do. Also Windows does not enforce using MSI interrupts for devices that support them, instead assigns the archaic line based interrupts to devices.
+MSIAutoTweak is a little Windows tool designed to optimize interrupt cpu allocation on Windows 11 systems with Intel hybrid CPUs (featuring P-cores and E-cores). It is inspired by other similar manual interrupt affinity tools, but I wanted to create a simple, automated solution that does not require manual configuration or knowledge of which devices to tweak. It automatically enables Message Signaled Interrupts (MSI) for devices that support it and assigns their interrupts to the appropriate cores based on the selected optimization strategy.
 Note: You have to rerun this after every driver update as these restore the default not optimized settings for that device.
+
+### Optimization Strategies
+
+- **Default** — Resets all devices to Windows machine default interrupt routing.
+- **Move to E-cores** — Assigns all device interrupts to E-cores, keeping P-cores free for application workloads.
+- **Hybrid** — Assigns USB and display device interrupts to P-cores, and all other devices to E-cores.
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/9196d06f-507c-4ce9-9b3c-4c9731a783cf" />
 
@@ -13,12 +19,12 @@ Note: You have to rerun this after every driver update as these restore the defa
 ### Prerequisites
 
 - Windows 10 or later.
-- .NET 8 runtime  or .NET 9 runtime (optional).
+- .NET 8 runtime or .NET 10 runtime (optional).
 - Administrator privileges for installation and usage.
 
 ### Using the Pre-Built Installer
 
-1. Download the installer `MSIAutoTweak-net8.exe` from Releases. Alternatively, if you have .NET 9 installed (optional), you can use `MSIAutoTweak-net9.exe`.
+1. Download the installer `MSIAutoTweak-net8.exe` from Releases. Alternatively, if you have .NET 10 installed (optional), you can use `MSIAutoTweak-net10.exe`.
 2. Run the installer as administrator.
 3. Follow the wizard:
    - Installs to `C:\Program Files\MSIAutoTweak`.

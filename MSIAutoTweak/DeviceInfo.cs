@@ -6,6 +6,7 @@ namespace MSIAutoTweak
     {
         public enum IRQ_DEVICE_POLICY : int
         {
+            IrqPolicyUndefined = -1,
             IrqPolicyMachineDefault = 0,
             IrqPolicyAllCloseProcessors = 1,
             IrqPolicyOneCloseProcessor = 2,
@@ -17,6 +18,7 @@ namespace MSIAutoTweak
 
         public enum IRQ_PRIORITY : int
         {
+            IrqPriorityUndefined = -1,
             IrqPriorityLow = 1,
             IrqPriorityNormal = 2,
             IrqPriorityHigh = 3
@@ -49,6 +51,5 @@ namespace MSIAutoTweak
 
         public bool IsMSISupported => (InterruptSupport & (uint)IRQ_SUPPORT.IrqSupportMSI) != 0 || (InterruptSupport & (uint)IRQ_SUPPORT.IrqSupportMSIX) != 0;
         public bool IsLineBasedSupported => (InterruptSupport & (uint)IRQ_SUPPORT.IrqSupportLineBased) != 0;
-      
     }
 }
