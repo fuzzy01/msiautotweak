@@ -337,8 +337,11 @@ namespace MSIAutoTweak
                 {
                     var availableCores = availableCoresForNetDevices.ToList();
 
-                    if (device.DeviceDesc == "Intel(R) Ethernet Controller I226-V" || device.DeviceDesc == "Intel(R) Wi-Fi 6E AX211 160MHz")                    {
-                        // Workaround for Intel I226-V bug
+                    // Workaround for intel network driver bug that causes the device to stop working if assigned to core 24 or higher
+                    // Let's be cautious and only apply this workaround to all network devices
+                    if (device.Class == "Net")                    
+                    //  if (device.DeviceDesc == "Intel(R) Ethernet Controller I226-V" || device.DeviceDesc == "Intel(R) Wi-Fi 6E AX211 160MHz")
+                    {
                         while (availableCores.Count > 0 && availableCores[0] >= 24)
                         {
                             availableCores.RemoveAt(0);
