@@ -15,7 +15,8 @@ namespace MSIAutoTweak
     {
         public bool RestartDevices { get; set; } = true;
         public bool OptimizeMiscDevices { get; set; } = true;
-        public int OptimizationStrategy { get; set; } = 0; // Default to Default strategy
+        public int OptimizationStrategy { get; set; } = 0;
+        public int VideoCoreCount { get; set; } = 1;
     }
 
     public partial class MainWindow : Window
@@ -46,10 +47,12 @@ namespace MSIAutoTweak
             try
             {
                 _msiOptimizer.LoadDevices();
+                int[] coreOptions = { 1, 2, 4, 8, 16 };
                 _msiOptimizer.Optimize(
                     RestartDevicesCheckBox.IsChecked ?? true,
                     OptimizeMiscDevicesCheckBox.IsChecked ?? true,
-                    (OptimizationStrategy)StrategyComboBox.SelectedIndex);
+                    (OptimizationStrategy)StrategyComboBox.SelectedIndex,
+                    coreOptions[VideoCoresComboBox.SelectedIndex]);
                 _msiOptimizer.LoadDevices();
                 DevicesGrid.Items.Refresh();
                 MessageBox.Show($"Optimization completed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -120,6 +123,8 @@ namespace MSIAutoTweak
             RestartDevicesCheckBox.IsChecked = _config.RestartDevices;
             OptimizeMiscDevicesCheckBox.IsChecked = _config.OptimizeMiscDevices;
             StrategyComboBox.SelectedIndex = _config.OptimizationStrategy;
+            int[] coreOptions = { 1, 2, 3, 4 };
+            VideoCoresComboBox.SelectedIndex = Math.Max(0, Array.IndexOf(coreOptions, _config.VideoCoreCount));
         }
 
         private void SaveConfig()
@@ -127,6 +132,8 @@ namespace MSIAutoTweak
             _config.RestartDevices = RestartDevicesCheckBox.IsChecked ?? true;
             _config.OptimizeMiscDevices = OptimizeMiscDevicesCheckBox.IsChecked ?? true;
             _config.OptimizationStrategy = StrategyComboBox.SelectedIndex;
+            int[] coreOptions = { 1, 2, 3, 4 };
+            _config.VideoCoreCount = coreOptions[VideoCoresComboBox.SelectedIndex];
             File.WriteAllText("config.json", JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true }));
         }
     }

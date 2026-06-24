@@ -7,8 +7,6 @@ using Windows.Win32.Devices.Properties;
 using Windows.Win32.Devices.DeviceAndDriverInstallation;
 using Windows.Win32.System.SystemInformation;
 using System.Diagnostics;
-using System.Data.Common;
-using System.Reflection.Metadata;
 
 namespace MSIAutoTweak
 {
@@ -210,7 +208,7 @@ namespace MSIAutoTweak
                         if (temporalKey != null)
                         {
                             // Check if the device has a specific temporal affinity policy set
-                            device.TargetSet = (Int64)temporalKey.GetValue("TargetSet", 0UL);
+                            device.TargetSet = (Int64)temporalKey.GetValue("TargetSet", 0L);
                         }
                     }
                     finally
@@ -241,19 +239,29 @@ namespace MSIAutoTweak
 
 
         public unsafe void Optimize(bool restartDevices = true, bool optimizeMiscDevices = true,
-            OptimizationStrategy strategy = OptimizationStrategy.MoveToECores)
+            OptimizationStrategy strategy = OptimizationStrategy.MoveToECores,
+            int videoCoreCount = 1)
         {
             if (strategy == OptimizationStrategy.Default)
             {
                 var hDev = PInvoke.SetupDiGetClassDevs((Guid?)null, null, HWND.Null, SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_PRESENT | SETUP_DI_GET_CLASS_DEVS_FLAGS.DIGCF_ALLCLASSES);
                 if (hDev.IsInvalid)
+                {
                     throw new Exception("Failed to get device information.");
+                }
+
                 try
                 {
                     foreach (var device in _devices)
-                        UnOptimizeDevice(hDev, device, restartDevices);
+                    {
+                        SetDeviceToDefault(hDev, device, restartDevices);
+                    }
                 }
-                finally { hDev.Dispose(); }
+                finally
+                {
+                    hDev.Dispose();
+                }
+
                 return;
             }
 
@@ -274,16 +282,13 @@ namespace MSIAutoTweak
             try
             {
                 var availableCoresStage1 = new List<int>();
+
                 for (int i = pCoreCount + eCoreCount - 1; i >= pCoreCount; i--)
-                {
                     availableCoresStage1.Add(i);
-                }
 
-
-                OptimizationResult res;
                 int coreUsed;
 
-                var priorityDeviceCores = new List<int>();
+                List<int> priorityDeviceCores;
                 if (strategy == OptimizationStrategy.Hybrid)
                 {
                     // Use P-cores for priority devices, E-cores for other devices
@@ -301,28 +306,27 @@ namespace MSIAutoTweak
                 var lineDevices = _devices.ToList().Where(d => !d.IsMSISupported && d.IsLineBasedSupported && d.TargetSet != 0).ToList();
 
                 // Put sensitive devices on specific cores
-
                 var usbDevices = msiDevices.FindAll(d => d.Class == "USB");
                 foreach (var device in usbDevices)
                 {
-                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices);
+                    coreUsed = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices, usePCores: strategy == OptimizationStrategy.Hybrid);
                     msiDevices.Remove(device);
-                    priorityDeviceCores.RemoveRange(0, strategy == OptimizationStrategy.Hybrid && hyperThreadingEnabled ? coreUsed * 2 : coreUsed);           
+                    priorityDeviceCores.RemoveRange(0, coreUsed);
                 }
 
-                var videoDevices = _devices.FindAll(d => d.Class == "Display");
+                var videoDevices = msiDevices.FindAll(d => d.Class == "Display");
                 foreach (var device in videoDevices)
                 {
-                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices);
+                    coreUsed = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices, messageNumberLimitOverride: videoCoreCount, usePCores: strategy == OptimizationStrategy.Hybrid);
                     msiDevices.Remove(device);
-                    priorityDeviceCores.RemoveRange(0, strategy == OptimizationStrategy.Hybrid && hyperThreadingEnabled ? coreUsed * 2 : coreUsed);           
+                    priorityDeviceCores.RemoveRange(0, coreUsed);
                 }
 
                 // Audio devices have no proper class, so we filter by device description
                 var audioDevices = msiDevices.FindAll(d => d.DeviceDesc == "High Definition Audio Controller" || d.DeviceDesc == "Realtek High Definition Audio" || d.DeviceDesc == "NVIDIA High Definition Audio");
                 foreach (var device in audioDevices)
                 {
-                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
+                    coreUsed = OptimizeDevice(hDevInfo, device, availableCoresStage1, restartDevice: restartDevices);
                     msiDevices.Remove(device);
                     availableCoresStage1.RemoveRange(0, coreUsed);
                 }
@@ -339,8 +343,6 @@ namespace MSIAutoTweak
 
                     // Workaround for intel network driver bug that causes the device to stop working if assigned to core 24 or higher
                     // Let's be cautious and only apply this workaround to all network devices
-                    if (device.Class == "Net")                    
-                    //  if (device.DeviceDesc == "Intel(R) Ethernet Controller I226-V" || device.DeviceDesc == "Intel(R) Wi-Fi 6E AX211 160MHz")
                     {
                         while (availableCores.Count > 0 && availableCores[0] >= 24)
                         {
@@ -348,7 +350,7 @@ namespace MSIAutoTweak
                         }
                     }
 
-                    (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
+                    coreUsed = OptimizeDevice(hDevInfo, device, availableCores, restartDevice: restartDevices);
                     maxCoreUsed = Math.Max(maxCoreUsed, coreUsed);
                     msiDevices.Remove(device);
                 }
@@ -375,7 +377,7 @@ namespace MSIAutoTweak
                         // Remaining devices will be assigned to the remaining cores
                         foreach (var device in msiDevices)
                         {
-                            (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresForMiscDevices, restartDevice: restartDevices);
+                            coreUsed = OptimizeDevice(hDevInfo, device, availableCoresForMiscDevices, restartDevice: restartDevices);
                             availableCoresForMiscDevices.RemoveRange(0, coreUsed);
                         }
                     }
@@ -384,7 +386,7 @@ namespace MSIAutoTweak
                         // Not enough cores available for remaining devices, un-optimize them
                         foreach (var device in msiDevices)
                         {
-                            UnOptimizeDevice(hDevInfo, device, restartDevice: restartDevices);
+                            SetDeviceToDefault(hDevInfo, device, restartDevice: restartDevices);
                         }
                     }
 
@@ -404,7 +406,7 @@ namespace MSIAutoTweak
                         // Line  devices will be assigned to the remaining cores
                         foreach (var device in lineDevices)
                         {
-                            (res, coreUsed) = OptimizeDevice(hDevInfo, device, availableCoresForLineDevices, restartDevice: restartDevices);
+                            coreUsed = OptimizeDevice(hDevInfo, device, availableCoresForLineDevices, restartDevice: restartDevices);
                             availableCoresForLineDevices.RemoveRange(0, coreUsed);
                         }
                     }
@@ -413,7 +415,7 @@ namespace MSIAutoTweak
                         // Not enough cores available for line devices, un-optimize them
                         foreach (var device in lineDevices)
                         {
-                            UnOptimizeDevice(hDevInfo, device, restartDevice: restartDevices);
+                            SetDeviceToDefault(hDevInfo, device, restartDevice: restartDevices);
                         }
                     }
                 }
@@ -425,72 +427,58 @@ namespace MSIAutoTweak
 
         }
 
-        
-        enum OptimizationResult
-        {
-            AlreadyOptimized,
-            SuccessfullyOptimized,
-            AlreadyUnOptimized,
-            SuccessfullyUnOptimized
-        }
 
-        private (OptimizationResult, int) OptimizeDevice(SafeHandle hDevInfo, Device device, List<int> availableCores, bool restartDevice = true)
+
+        private int OptimizeDevice(SafeHandle hDevInfo, Device device, List<int> availableCores, bool restartDevice = true, int messageNumberLimitOverride = -1, bool usePCores = false)
         {
-            var messageNumberLimit = Math.Max(device.MessageNumberLimit, 1);
-            if (availableCores.Count >= messageNumberLimit)
+            var requiredCores = messageNumberLimitOverride > 0 ? messageNumberLimitOverride : Math.Max(device.MessageNumberLimit, 1);
+            requiredCores = usePCores ? 2 * requiredCores : requiredCores;
+            if (availableCores.Count >= requiredCores)
             {
                 Int64 affinityMask = 0;
-                for (int i = 0; i < messageNumberLimit; i++)
+                for (int i = 0; i < requiredCores; i += usePCores ? 2 : 1)
                 {
                     int coreIndex = availableCores[i];
                     Debug.WriteLine($"Assign {device.Class} Device {device.DeviceDesc} to Core {coreIndex}");
                     affinityMask |= 1L << coreIndex;
                 }
 
-                return (OptimizeDevice(hDevInfo, device, affinityMask, restartDevice), messageNumberLimit);
+                OptimizeDevice(hDevInfo, device, affinityMask, restartDevice, messageNumberLimitOverride);
+                return requiredCores;
             }
             else
             {
-                Debug.WriteLine($"Not enough cores available for {device.Class} Device {device.DeviceDesc}. Available: {availableCores.Count}, Required: {messageNumberLimit}");
+                Debug.WriteLine($"Not enough cores available for {device.Class} Device {device.DeviceDesc}. Available: {availableCores.Count}, Required: {requiredCores}");
 
-                return (UnOptimizeDevice(hDevInfo, device, restartDevice), 0);
+                SetDeviceToDefault(hDevInfo, device, restartDevice, messageNumberLimitOverride);
+                return 0;
             }
         }
 
 
-        private OptimizationResult OptimizeDevice(SafeHandle hDevInfo, Device device, Int64 affinityMask, bool restartDevice = true)
+        private void OptimizeDevice(SafeHandle hDevInfo, Device device, Int64 affinityMask, bool restartDevice = true, int messageNumberLimitOverride = -1)
         {
-            if ((device.MSISupported != 0) == device.IsMSISupported && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors && device.AssignmentSetOverride == affinityMask)
-                return OptimizationResult.AlreadyOptimized;
-
-            SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors, affinityMask);
+            SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors, affinityMask, messageNumberLimitOverride);
 
             if (restartDevice)
             {
                 RestartDevice(hDevInfo, device);
             }
-
-            return OptimizationResult.SuccessfullyOptimized;
         }
 
-        private OptimizationResult UnOptimizeDevice(SafeHandle hDevInfo, Device device, bool restartDevice = true)
+        private void SetDeviceToDefault(SafeHandle hDevInfo, Device device, bool restartDevice = true, int messageNumberLimitOverride = -1)
         {
-            if ((device.MSISupported != 0) == device.IsMSISupported && device.DevicePolicy == (int)Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault)
-                return OptimizationResult.AlreadyUnOptimized;
-
-            SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault, 0L);
+            SetDeviceParameters(hDevInfo, device, Device.IRQ_DEVICE_POLICY.IrqPolicyMachineDefault, 0L, messageNumberLimitOverride);
 
             if (restartDevice)
             {
                 RestartDevice(hDevInfo, device);
             }
-
-            return OptimizationResult.SuccessfullyUnOptimized;
         }
 
-        private void SetDeviceParameters(SafeHandle hDevInfo, Device device, Device.IRQ_DEVICE_POLICY devicePolicy, Int64 affinityMask)
+        private void SetDeviceParameters(SafeHandle hDevInfo, Device device, Device.IRQ_DEVICE_POLICY devicePolicy, Int64 affinityMask, int messageNumberLimit = -1)
         {
-            var devInfoData = GetDeviceInfo(hDevInfo, device);
+            var devInfoData = MSIOptimizer.GetDeviceInfo(hDevInfo, device);
 
             var hKey = PInvoke.SetupDiOpenDevRegKey(hDevInfo, in devInfoData, (uint)SETUP_DI_PROPERTY_CHANGE_SCOPE.DICS_FLAG_GLOBAL, 0, (uint)DIREG.DIREG_DEV, (uint)KEY_ACCESS.KEY_ALL_ACCESS);
             if (hKey.IsInvalid)
@@ -504,23 +492,37 @@ namespace MSIAutoTweak
                 if (device.IsMSISupported)
                 {
                     msiKey = regKey.CreateSubKey(@"Interrupt Management\MessageSignaledInterruptProperties", writable: true);
-                    msiKey.SetValue("MSISupported", 1, RegistryValueKind.DWord);
-                    device.MSISupported = 1;
+                    if (device.MSISupported != 1)
+                    {
+                        // Enable MSI if not already enabled
+                        msiKey.SetValue("MSISupported", 1, RegistryValueKind.DWord);
+                        device.MSISupported = 1;
+                    }
+                    if (messageNumberLimit > 0 && device.MessageNumberLimit != messageNumberLimit)
+                    {
+                        msiKey.SetValue("MessageNumberLimit", messageNumberLimit, RegistryValueKind.DWord);
+                        device.MessageNumberLimit = messageNumberLimit;
+                    }
                 }
 
-                affinityKey = regKey.CreateSubKey(@"Interrupt Management\Affinity Policy", writable: true);
-                affinityKey.SetValue("DevicePolicy", (int)devicePolicy, RegistryValueKind.DWord);
-                device.DevicePolicy = (int)devicePolicy;
+                if (device.DevicePolicy != (int)devicePolicy ||
+                    (devicePolicy == Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors && device.AssignmentSetOverride != affinityMask))
+                {
+                    affinityKey = regKey.CreateSubKey(@"Interrupt Management\Affinity Policy", writable: true);
+                    affinityKey.SetValue("DevicePolicy", (int)devicePolicy, RegistryValueKind.DWord);
+                    device.DevicePolicy = (int)devicePolicy;
 
-                if (devicePolicy == Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors)
-                {
-                    affinityKey.SetValue("AssignmentSetOverride", BitConverter.GetBytes(affinityMask), RegistryValueKind.Binary);
+                    if (devicePolicy == Device.IRQ_DEVICE_POLICY.IrqPolicySpecifiedProcessors)
+                    {
+                        affinityKey.SetValue("AssignmentSetOverride", BitConverter.GetBytes(affinityMask), RegistryValueKind.Binary);
+                    }
+                    else
+                    {
+                        affinityKey.DeleteValue("AssignmentSetOverride", false);
+                    }
+
+                    device.AssignmentSetOverride = affinityMask;
                 }
-                else
-                {
-                    affinityKey.DeleteValue("AssignmentSetOverride", false);
-                }
-                device.AssignmentSetOverride = affinityMask;
             }
             finally
             {
@@ -533,7 +535,7 @@ namespace MSIAutoTweak
 
         public unsafe void RestartDevice(SafeHandle hDevInfo, Device device)
         {
-            var devInfoData = GetDeviceInfo(hDevInfo, device);
+            var devInfoData = MSIOptimizer.GetDeviceInfo(hDevInfo, device);
 
             var buffer = new Span<byte>(new byte[1024]);
             uint requiredSize = 0;
@@ -576,7 +578,7 @@ namespace MSIAutoTweak
             }
         }
 
-        private unsafe SP_DEVINFO_DATA GetDeviceInfo(SafeHandle hDevInfo, Device device)
+        private static unsafe SP_DEVINFO_DATA GetDeviceInfo(SafeHandle hDevInfo, Device device)
         {
             var devInfoData = new SP_DEVINFO_DATA
             {
@@ -602,7 +604,7 @@ namespace MSIAutoTweak
         }
 
         // Complicated logic to get the number of P-cores and E-cores
-        private unsafe (int, int, bool) GetCPUInformation()
+        private static unsafe (int, int, bool) GetCPUInformation()
         {
             Marshal.SetLastPInvokeError(0); // Reset last error, workaround for a bug in CSWin32 wrapper
 

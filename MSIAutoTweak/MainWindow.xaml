@@ -73,6 +73,13 @@
                         <ComboBoxItem Content="Move to E-cores"/>
                         <ComboBoxItem Content="Hybrid"/>
                     </ComboBox>
+                    <TextBlock Text="GPU cores:" VerticalAlignment="Center" Margin="16,0,8,0"/>
+                    <ComboBox x:Name="VideoCoresComboBox" Width="55">
+                        <ComboBoxItem Content="1"/>
+                        <ComboBoxItem Content="2"/>
+                        <ComboBoxItem Content="3"/>
+                        <ComboBoxItem Content="4"/>
+                    </ComboBox>
                 </StackPanel>
                 <CheckBox x:Name="RestartDevicesCheckBox"
                           Content="Restart devices (can cause screen flicker)"/>
