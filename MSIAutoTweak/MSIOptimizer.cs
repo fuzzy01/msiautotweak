@@ -283,8 +283,22 @@ namespace MSIAutoTweak
             {
                 var availableCoresStage1 = new List<int>();
 
-                for (int i = pCoreCount + eCoreCount - 1; i >= pCoreCount; i--)
-                    availableCoresStage1.Add(i);
+                if (eCoreCount != 0)
+                {
+                    // Use only E-cores if available
+                    for (int i = pCoreCount + eCoreCount - 1; i >= pCoreCount; i--)
+                    {
+                        availableCoresStage1.Add(i);
+                    }
+                }
+                else
+                {
+                    // We have no E-cores, reserve at least 4 P-cores for apps
+                    for (int i = pCoreCount - 1; i >= 4; i--)
+                    {
+                        availableCoresStage1.Add(i);
+                    }
+                }
 
                 int coreUsed;
 
@@ -309,7 +323,7 @@ namespace MSIAutoTweak
                 var usbDevices = msiDevices.FindAll(d => d.Class == "USB");
                 foreach (var device in usbDevices)
                 {
-                    coreUsed = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices, usePCores: strategy == OptimizationStrategy.Hybrid);
+                    coreUsed = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices, usePCores: strategy == OptimizationStrategy.Hybrid && hyperThreadingEnabled);
                     msiDevices.Remove(device);
                     priorityDeviceCores.RemoveRange(0, coreUsed);
                 }
@@ -317,7 +331,7 @@ namespace MSIAutoTweak
                 var videoDevices = msiDevices.FindAll(d => d.Class == "Display");
                 foreach (var device in videoDevices)
                 {
-                    coreUsed = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices, messageNumberLimitOverride: videoCoreCount, usePCores: strategy == OptimizationStrategy.Hybrid);
+                    coreUsed = OptimizeDevice(hDevInfo, device, priorityDeviceCores, restartDevice: restartDevices, messageNumberLimitOverride: videoCoreCount, usePCores: strategy == OptimizationStrategy.Hybrid && hyperThreadingEnabled);
                     msiDevices.Remove(device);
                     priorityDeviceCores.RemoveRange(0, coreUsed);
                 }
