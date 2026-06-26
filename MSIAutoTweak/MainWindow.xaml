@@ -5,6 +5,7 @@
         Title="MSIAutoTweak"
         SizeToContent="WidthAndHeight"
         WindowStyle="SingleBorderWindow"
+        FontSize="12"
         ResizeMode="CanMinimize">
     <Window.Resources>
         <local:InterruptSupportConverter x:Key="interruptSupportConverter"/>
@@ -23,7 +24,6 @@
                       IsReadOnly="True"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto"
-                      FontSize="12"
                       LoadingRow="DevicesGrid_LoadingRow">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Device Name"
@@ -37,10 +37,10 @@
                                         Width="140"/>
                     <DataGridCheckBoxColumn Header="MSI Enabled"
                                             Binding="{Binding MSISupported}"
-                                            Width="75"/>
+                                            Width="90"/>
                     <DataGridTextColumn Header="Device Policy"
                                         Binding="{Binding DevicePolicy,Converter={StaticResource devicePolicyConverter}}"
-                                        Width="220"/>
+                                        Width="160"/>
                     <DataGridTextColumn Header="Device Priority"
                                         Binding="{Binding DevicePriority,Converter={StaticResource devicePriorityConverter}}"
                                         Width="90"/>

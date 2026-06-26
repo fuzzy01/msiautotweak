@@ -1,5 +1,4 @@
 ﻿using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 
 namespace MSIAutoTweak
@@ -11,7 +10,11 @@ namespace MSIAutoTweak
         {
             Directory.SetCurrentDirectory(AppContext.BaseDirectory); // Set current directory to the executable's location        
 
-            Application app = new Application();
+            Application app = new App();
+#if NET9_0_OR_GREATER
+#pragma warning disable WPF0001
+            // app.ThemeMode = System.Windows.ThemeMode.Light; // Set the theme mode to Light for .NET 9.0 or greater
+#endif
             app.Run(new MainWindow());
         }
     }
