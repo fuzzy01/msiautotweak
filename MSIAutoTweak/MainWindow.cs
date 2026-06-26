@@ -47,7 +47,7 @@ namespace MSIAutoTweak
             try
             {
                 _msiOptimizer.LoadDevices();
-                int[] coreOptions = { 1, 2, 4, 8, 16 };
+                int[] coreOptions = { 1, 2, 3, 4 };
                 _msiOptimizer.Optimize(
                     RestartDevicesCheckBox.IsChecked ?? true,
                     OptimizeMiscDevicesCheckBox.IsChecked ?? true,
